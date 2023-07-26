@@ -111,6 +111,9 @@ func handleRequest(conn net.Conn) {
 	// add port to response
 	buffer = addPortToBuffer(buffer, port)
 
+	// add newline to response
+	buffer = append(buffer, '\n')
+
 	conn.Write(buffer)
 }
 
