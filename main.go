@@ -22,7 +22,7 @@ func testConnection(port int) bool {
 		println("Dial failed:", err.Error())
 		return false
 	}
-	conn.Close()
+	defer conn.Close()
 	return true
 }
 
@@ -49,16 +49,17 @@ func getAvailablePort() int {
 	return currentAvailablePort
 }
 
-
 func handleRequest(conn net.Conn) {
+	defer conn.Close()
+
 	// incoming request
 	buffer := make([]byte, 1024)
-	_, err := conn.Read(buffer)
+	n, err := conn.Read(buffer)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	message := string(buffer)
+	message := string(buffer[:n])
 	var errorMessage string
 
 	portStr, request, succeeded := strings.Cut(message, " ")
@@ -91,6 +92,7 @@ func handleRequest(conn net.Conn) {
 		conn.Write([]byte(errorMessage))
 		return
 	}
+	defer serverConnection.Close()
 
 	_, err = serverConnection.Write([]byte(request))
 	if err != nil {
@@ -101,7 +103,7 @@ func handleRequest(conn net.Conn) {
 
 	// get response
 	buffer = make([]byte, 1024)
-	_, err = serverConnection.Read(buffer)
+	n, err = serverConnection.Read(buffer)
 	if err != nil {
 		errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not read from port %v"}`, port)
 		conn.Write([]byte(errorMessage))
@@ -109,7 +111,7 @@ func handleRequest(conn net.Conn) {
 	}
 
 	// add port to response
-	buffer = addPortToBuffer(buffer, port)
+	buffer = addPortToBuffer(buffer[:n], port)
 
 	// add newline to response
 	buffer = append(buffer, '\n')
