@@ -66,6 +66,8 @@ func handleRequest(conn net.Conn) {
 			log.Fatal(err)
 		}
 
+		log.Println("Received request:", message)
+
 		message = strings.TrimSuffix(message, "\n") // remove newline
 		var errorMessage string
 
@@ -84,6 +86,8 @@ func handleRequest(conn net.Conn) {
 			return
 		}
 
+		log.Printf("Port: %v, Request: %v\n", port, request)
+
 		if port == -1 {
 			port = getAvailablePort()
 		} else if !slices.Contains(availablePorts, port) {
@@ -101,7 +105,7 @@ func handleRequest(conn net.Conn) {
 		}
 		defer serverConnection.Close()
 
-		_, err = serverConnection.Write([]byte(request))
+		_, err = serverConnection.Write([]byte(request + "\n"))
 		if err != nil {
 			errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not write to port %v"}`, port)
 			conn.Write([]byte(errorMessage))
@@ -121,7 +125,7 @@ func handleRequest(conn net.Conn) {
 		buffer = addPortToBuffer(buffer[:n], port)
 
 		// add newline to response
-		buffer = append(buffer, '\n')
+		// buffer = append(buffer)
 
 		conn.Write(buffer)
 	}
