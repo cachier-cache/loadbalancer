@@ -152,11 +152,6 @@ func listenForRequests() {
 }
 
 func main() {
-	// TODO: receive requests and route then to a port via round robin
-	// and then return the port back to the client
-
-	// the client will need to keep track of the port
-	// the client should have load balancing off by default
 	initializeAvailablePorts()
 	listenForRequests()
 }
