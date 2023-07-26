@@ -69,13 +69,14 @@ func handleRequest(conn net.Conn) {
 		message = strings.TrimSuffix(message, "\n") // remove newline
 		var errorMessage string
 
-		portStr, request, succeeded := strings.Cut(message, " ")
-		if !succeeded {
+		messageParts := strings.SplitN(message, " ", 2)
+		if len(messageParts) != 2 {
 			errorMessage = `{"status": "error", "message": "Invalid request. Expected format: <port> <request>"}`
 			conn.Write([]byte(errorMessage))
 			return
 		}
 
+		portStr, request := messageParts[0], messageParts[1]
 		port, err := strconv.Atoi(portStr)
 		if err != nil {
 			errorMessage = fmt.Sprintf(`{"status": "error", "message": "Invalid port %v"}`, portStr)
