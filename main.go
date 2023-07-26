@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -19,7 +21,6 @@ var nextPortIndex = 0
 func testConnection(port int) bool {
 	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: []byte{127, 0, 0, 1}, Port: port})
 	if err != nil {
-		println("Dial failed:", err.Error())
 		return false
 	}
 	defer conn.Close()
@@ -52,71 +53,77 @@ func getAvailablePort() int {
 func handleRequest(conn net.Conn) {
 	defer conn.Close()
 
-	// incoming request
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		log.Fatal(err)
+	reader := bufio.NewReader(conn)
+
+	for {
+		// incoming request
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				// client closed the connection
+				break
+			}
+			log.Fatal(err)
+		}
+
+		message = strings.TrimSuffix(message, "\n") // remove newline
+		var errorMessage string
+
+		portStr, request, succeeded := strings.Cut(message, " ")
+		if !succeeded {
+			errorMessage = `{"status": "error", "message": "Invalid request. Expected format: <port> <request>"}`
+			conn.Write([]byte(errorMessage))
+			return
+		}
+
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			errorMessage = fmt.Sprintf(`{"status": "error", "message": "Invalid port %v"}`, portStr)
+			conn.Write([]byte(errorMessage))
+			return
+		}
+
+		if port == -1 {
+			port = getAvailablePort()
+		} else if !slices.Contains(availablePorts, port) {
+			errorMessage = fmt.Sprintf(`{"status": "error", "message": "Port %v is not available"}`, port)
+			conn.Write([]byte(errorMessage))
+			return
+		}
+
+		// send request to port
+		serverConnection, err := net.Dial("tcp", fmt.Sprintf(":%v", port))
+		if err != nil {
+			errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not connect to port %v"}`, port)
+			conn.Write([]byte(errorMessage))
+			return
+		}
+		defer serverConnection.Close()
+
+		_, err = serverConnection.Write([]byte(request))
+		if err != nil {
+			errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not write to port %v"}`, port)
+			conn.Write([]byte(errorMessage))
+			return
+		}
+
+		// get response
+		buffer := make([]byte, 1024)
+		n, err := serverConnection.Read(buffer)
+		if err != nil {
+			errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not read from port %v"}`, port)
+			conn.Write([]byte(errorMessage))
+			return
+		}
+
+		// add port to response
+		buffer = addPortToBuffer(buffer[:n], port)
+
+		// add newline to response
+		buffer = append(buffer, '\n')
+
+		conn.Write(buffer)
 	}
-
-	message := string(buffer[:n])
-	var errorMessage string
-
-	portStr, request, succeeded := strings.Cut(message, " ")
-	if !succeeded {
-		errorMessage = `{"status": "error", "message": "Invalid request. Expected format: <port> <request>"}`
-		conn.Write([]byte(errorMessage))
-		return
-	}
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		errorMessage = fmt.Sprintf(`{"status": "error", "message": "Invalid port %v"}`, portStr)
-		conn.Write([]byte(errorMessage))
-		return
-	}
-
-	if port == -1 {
-		port = getAvailablePort()
-	} else if !slices.Contains(availablePorts, port) {
-		errorMessage = fmt.Sprintf(`{"status": "error", "message": "Port %v is not available"}`, port)
-		conn.Write([]byte(errorMessage))
-		return
-	}
-
-	// send request to port
-	// TODO: leave these connections open on the testConnection method with a global map
-	serverConnection, err := net.Dial("tcp", fmt.Sprintf(":%v", port))
-	if err != nil {
-		errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not connect to port %v"}`, port)
-		conn.Write([]byte(errorMessage))
-		return
-	}
-	defer serverConnection.Close()
-
-	_, err = serverConnection.Write([]byte(request))
-	if err != nil {
-		errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not write to port %v"}`, port)
-		conn.Write([]byte(errorMessage))
-		return
-	}
-
-	// get response
-	buffer = make([]byte, 1024)
-	n, err = serverConnection.Read(buffer)
-	if err != nil {
-		errorMessage = fmt.Sprintf(`{"status": "error", "message": "loadbalancer server error: could not read from port %v"}`, port)
-		conn.Write([]byte(errorMessage))
-		return
-	}
-
-	// add port to response
-	buffer = addPortToBuffer(buffer[:n], port)
-
-	// add newline to response
-	buffer = append(buffer, '\n')
-
-	conn.Write(buffer)
 }
 
 func addPortToBuffer(buffer []byte, port int) []byte {

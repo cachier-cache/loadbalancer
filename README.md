@@ -7,6 +7,7 @@ TODO:
 - implement round robin
 - implement based on resources (later on)
 - might need to change hardcoded byte 1024
+- split the code into different files
 
 -1 {"command": "get", "key": "test"}
 
