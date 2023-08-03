@@ -28,13 +28,11 @@ func testConnection(port int) bool {
 }
 
 func initializeAvailablePorts() {
-	for i := initialPort; i < initialPort+100; i++ {
+	for i := initialPort; i < initialPort+10+1; i++ {
 		if testConnection(i) {
 			availablePorts = append(availablePorts, i)
 			continue
 		}
-
-		break
 	}
 
 	if len(availablePorts) == 0 {
